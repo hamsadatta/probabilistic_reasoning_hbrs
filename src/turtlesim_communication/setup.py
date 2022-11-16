@@ -15,8 +15,8 @@ setup(
     zip_safe=True,
     maintainer='melody',
     maintainer_email='kishansawant96@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='This package is used to communicate with turtlesim. It will receive position of the turtle and moves it as per input',
+    license='Apache License 2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
