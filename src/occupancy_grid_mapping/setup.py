@@ -15,12 +15,13 @@ setup(
     zip_safe=True,
     maintainer='melody',
     maintainer_email='kishansawant96@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Mapping environment: occupancy grid mapping using turtle bot in simulation',
+    license='Apache License 2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'gmapping_node = occupancy_grid_mapping.gmapping_node:main'
+            'gmapping_node = occupancy_grid_mapping.gmapping_node:main',
+            'create_from_rosbag = occupancy_grid_mapping.create_from_rosbag:main'
         ],
     },
 )
