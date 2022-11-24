@@ -4,7 +4,7 @@
   <name>occupancy_grid_mapping</name>
   <version>0.0.0</version>
   <description>Mapping environment: occupancy grid mapping using turtle bot in simulation</description>
-  <maintainer email="kishansawant96@gmail.com">melody</maintainer>
+  <maintainer email="pr_hbrs@gmail.com">pr_hbrs</maintainer>
   <license>Apache License 2.0</license>
 
   <test_depend>ament_copyright</test_depend>
@@ -12,6 +12,20 @@
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
 
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>turtlesim</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>numpy</exec_depend>
+  <exec_depend>matplotlib</exec_depend>
+  <exec_depend>cv2</exec_depend>
+  <exec_depend>ros2bag</exec_depend>
+  <exec_depend>sqlite3</exec_depend>
+  <exec_depend>rosidl_runtime_py</exec_depend>
+  <exec_depend>threading</exec_depend>
+  <exec_depend>sys</exec_depend>
+  
   <export>
     <build_type>ament_python</build_type>
   </export>
