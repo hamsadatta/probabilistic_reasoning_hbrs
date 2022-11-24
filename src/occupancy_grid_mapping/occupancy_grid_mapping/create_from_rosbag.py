@@ -2,22 +2,30 @@
 
 # import rospy
 # import rosbag
-import ros2bag
+# import ros2bag
 import rclpy
 import numpy as np
 import matplotlib.pyplot as plt
 from time import perf_counter
-
+import cv2
 import sys
+import sqlite3
+from rosidl_runtime_py.utilities import get_message
+from rclpy.serialization import deserialize_message
 
-SCRIPTS_PATH = '/home/melody/Desktop/MAS_course_materials/Courses/04Fourth Semester/PR/probabilistic_reasoning_hbrs/src/occupancy_grid_mapping/occupancy_grid_mapping'
-BAG_FILE_PATH = '/home/melody/Desktop/MAS_course_materials/Courses/04Fourth Semester/PR/probabilistic_reasoning_hbrs/src/occupancy_grid_mapping/occupancy_grid_mapping/bagfiles'
-MAPS_PATH = '/home/melody/Desktop/MAS_course_materials/Courses/04Fourth Semester/PR/probabilistic_reasoning_hbrs/src/occupancy_grid_mapping/occupancy_grid_mapping/maps'
+SCRIPTS_PATH = '/home/melody/Desktop/MAS_course_materials/Courses/04Fourth\ Semester/PR/probabilistic_reasoning_hbrs/src/occupancy_grid_mapping/occupancy_grid_mapping'
+BAG_FILE_PATH = '/home/melody/Desktop/MAS_course_materials/Courses/04Fourth\ Semester/PR/probabilistic_reasoning_hbrs/src/occupancy_grid_mapping/occupancy_grid_mapping/bagfiles'
+MAPS_PATH = '/home/melody/Desktop/MAS_course_materials/Courses/04Fourth\ Semester/PR/probabilistic_reasoning_hbrs/src/occupancy_grid_mapping/occupancy_grid_mapping/maps'
 sys.path.insert(0, SCRIPTS_PATH)
 
-from grid_map import *
-from message_handler import * 
-from utils import *
+from .submodules.bresenham import *
+from .submodules.utils import *
+from .submodules.grid_map import *
+from .submodules.message_handler import *
+
+# from probabilistic_reasoning_hbrs.src.occupancy_grid_mapping.occupancy_grid_mapping.submodules.grid_map import *
+# from probabilistic_reasoning_hbrs.src.occupancy_grid_mapping.occupancy_grid_mapping.submodules.message_handler import * 
+# from probabilistic_reasoning_hbrs.src.occupancy_grid_mapping.occupancy_grid_mapping.submodules.utils import *
 
 P_prior = 0.5	# Prior occupancy probability
 P_occ = 0.9	# Probability that cell is occupied with total confidence
@@ -27,14 +35,43 @@ RESOLUTION = 0.04 # Grid resolution in [m]
 
 MAP_NAME = BAG_FILE_NAME = 'stage_2' # map and bagfile name without extension
 
-def main():
 
+class BagFileParser():
+    def __init__(self, bag_file):
+        print("line 41")
+        self.conn = sqlite3.connect(bag_file)
+        print("line 43")
+        self.cursor = self.conn.cursor()
+        print("line 44")
+        ## create a message type map
+        topics_data = self.cursor.execute("SELECT id, name, type FROM topics").fetchall()
+        print("line 47")
+        self.topic_type = {name_of:type_of for id_of,name_of,type_of in topics_data}
+        self.topic_id = {name_of:id_of for id_of,name_of,type_of in topics_data}
+        print("line 50")
+        self.topic_msg_message = {name_of:get_message(type_of) for id_of,name_of,type_of in topics_data}
+
+    def __del__(self):
+        self.conn.close()
+
+    # Return [(timestamp0, message0), (timestamp1, message1), ...]
+    def get_messages(self, topic_name):
+
+        topic_id = self.topic_id[topic_name]
+        # Get from the db
+        rows = self.cursor.execute("SELECT timestamp, data FROM messages WHERE topic_id = {}".format(topic_id)).fetchall()
+        # Deserialise all and timestamp them
+        return [ (timestamp,deserialize_message(data, self.topic_msg_message[topic_name])) for timestamp,data in rows]
+
+def main():
+	
 	try:
 
 		##################### Init section #####################
-
-		bag = ros2bag.Bag(BAG_FILE_PATH + '/' + BAG_FILE_NAME + '.bag')
-
+		print(BAG_FILE_PATH + '/' + BAG_FILE_NAME + '.bag')
+		# bag = ros2bag.Bag(BAG_FILE_PATH + '/' + BAG_FILE_NAME + '.bag')
+		bag = BagFileParser(BAG_FILE_PATH + '/' + BAG_FILE_NAME + '.bag')
+		print("line 42")
 		if MAP_NAME[:5] == 'stage':
 
 			map_x_lim = [-3, 3]
@@ -52,7 +89,7 @@ def main():
 			map_x_lim = [-10, 10]
 			map_y_lim = [-6, 6]
 			dir_pointer_len = 0.25
-
+		print("line 60")
 		N_odom = 0
 		N_scan = 0
 		N_paired = 0
@@ -63,10 +100,10 @@ def main():
 
 		# Create grid map 
 		gridMap = GridMap(X_lim = map_x_lim, 
-				  Y_lim = map_y_lim, 
-				  resolution = RESOLUTION, 
-				  p = P_prior)
-
+					Y_lim = map_y_lim, 
+					resolution = RESOLUTION, 
+					p = P_prior)
+		print("line 74")
 		# Init figure
 		plt.style.use('seaborn-ticks')
 		fig = plt.figure(1)
@@ -102,7 +139,7 @@ def main():
 			x_odom, y_odom = get_odom_position(msgOdom)   # x,y in [m]
 			theta_odom = get_odom_orientation(msgOdom)    # theta in [radians]
 
-            		# LidarScan message processing
+					# LidarScan message processing
 			distances, angles, information = lidar_scan(msgScan)       # distances in [m], angles in [radians], information [0-1]
 
 			# Lidar measurements in X-Y plane 
@@ -158,11 +195,11 @@ def main():
 				set_pixel_color(bgr_image, x, y, 'GREEN')
 
 			resized_image = cv2.resize(src = bgr_image, 
-						   dsize = (500, 500), 
-						   interpolation = cv2.INTER_AREA)
+							dsize = (500, 500), 
+							interpolation = cv2.INTER_AREA)
 
 			rotated_image = cv2.rotate(src = resized_image, 
-						   rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
+							rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
 
 			cv2.imshow("Grid map", rotated_image)
 			cv2.waitKey(1)
@@ -211,28 +248,28 @@ def main():
 
 		# Saving Grid Map
 		resized_image = cv2.resize(src = gridMap.to_BGR_image(), 
-								   dsize = (500, 500), 
-								   interpolation = cv2.INTER_AREA)
+									dsize = (500, 500), 
+									interpolation = cv2.INTER_AREA)
 
 		rotated_image = cv2.rotate(src = resized_image, 
-					   rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
+						rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
 
 		flag_1 = cv2.imwrite(img = rotated_image * 255.0, 
-				     filename = 'maps/' + MAP_NAME + '_GRID_MAP.png')
+						filename = 'maps/' + MAP_NAME + '_GRID_MAP.png')
 
 		# Calculating Maximum likelihood estimate of the map
 		gridMap.calc_MLE()
 
 		# Saving MLE of the Grid Map
 		resized_image_MLE = cv2.resize(src = gridMap.to_BGR_image(), 
-				               dsize = (500, 500), 
-					       interpolation = cv2.INTER_AREA)
+								dsize = (500, 500), 
+							interpolation = cv2.INTER_AREA)
 
 		rotated_image_MLE = cv2.rotate(src = resized_image_MLE, 
-					       rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
+							rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
 
 		flag_2 = cv2.imwrite(img = rotated_image_MLE * 255.0, 
-				     filename = 'maps/' + MAP_NAME + '_GRID_MAP_MLE.png')
+						filename = 'maps/' + MAP_NAME + '_GRID_MAP_MLE.png')
 
 		if flag_1 and flag_2:
 			print('\nGrid map successfully saved!\n')
@@ -240,11 +277,11 @@ def main():
 		if cv2.waitKey(0) == 27:
 			cv2.destroyAllWindows()
 
-	except rclpy.ROSInterruptException:
+	except:
 
 		print('\r\nSIMULATION TERMINATED!')
 
 		pass
 
 if __name__ == '__main__':
-    main()	
+    main()
