@@ -21,12 +21,26 @@ dynamic obstacles
 ### Using `gmapping_node`
 -----------------------
 
-** Software versions: **
+#### Software versions:
 
-Ubuntu : 20.04  
-ROS2   : rolling  
+    Ubuntu : 20.04  
+    ROS2   : rolling  
 
-Install ROS2 and source the necessary files as described in the [ROS2 documentation](https://docs.ros.org/en/rolling/Installation.html). Clone the `probabilistic_reasoning_hbrs` repository.
+- Install ROS2 and source the necessary files as described in the [ROS2 documentation](https://docs.ros.org/en/rolling/Installation.html). Clone the `probabilistic_reasoning_hbrs` repository.
+
+- Current ROS2 related files sourced in `~/.bashrc` are as follows,
+
+    ```  
+    source /opt/ros/rolling/setup.bash  
+    source /usr/share/colcon_cd/function/colcon_cd.sh  
+    export _colcon_cd_root=/opt/ros/rolling/  
+    source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash  
+
+    stat /usr/share/gazebo/setup.sh &> /dev/null  
+    if [ $? -eq 0 ]; then  
+        source /usr/share/gazebo/setup.sh  
+    fi    
+    ```
 
 Steps:
 
@@ -36,16 +50,16 @@ Steps:
 2. Launch the `turtlebot3_house` gazebo environment,
     > `ros2 launch  turtlebot3_gazebo turtlebot3_house.launch.py`
 
-    > Note:   
-        * While running this node for the first time it takes few minutes to load the environment.  
-        * If the robot does not appear in simulation, please try launching the node couple of times until the robot is loaded. 
+    > Note:  
+        - While running this node for the first time it takes few minutes to load the environment.   
+        - If the robot does not appear in simulation, please try launching the node couple of times until the robot is loaded. 
         
 
 3. Run the `teleop_twist_keyboard` node to control turtlebot3 in simulation,
     > `ros2 run teleop_twist_keyboard teleop_twist_keyboard`
 
 
-4. From the path "probabilistic_reasoning_hbrs/src/occupancy_grid_mapping", build the ROS2 package,
+4. From the path, "probabilistic_reasoning_hbrs/src/occupancy_grid_mapping", build the ROS2 package,
     > `colcon build --packages-select occupancy_grid_mapping`
 
 5. Run the `local_setup.bash` file from the same path and in the same terminal,
