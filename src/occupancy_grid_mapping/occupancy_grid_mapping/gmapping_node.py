@@ -12,257 +12,210 @@ from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
 from rclpy.qos import qos_profile_sensor_data
 
-# import sys
-
-# SCRIPTS_PATH = '/home/maestro/catkin_ws/src/grid_mapping/scripts'
-# MAPS_PATH = '/home/maestro/catkin_ws/src/grid_mapping/maps'
-# sys.path.insert(0, SCRIPTS_PATH)
-
 from .submodules.bresenham import *
 from .submodules.utils import *
 from .submodules.grid_map import *
 
-MAPS_PATH = '/home/melody/Desktop/MAS_course_materials/Courses/04Fourth\ Semester/PR/probabilistic_reasoning_hbrs/src/occupancy_grid_mapping/occupancy_grid_mapping/gmapping_node.py'
+MAPS_PATH = 'maps/'
 
 class GmappingClass(Node):
 
-	def __init__(self):
-		super().__init__('gmapping_node')
-		self.distances = np.array([])
-		self.angles = np.array([])
-		self.information = np.array([])
-		self.x_odom, self.y_odom, self.theta_odom, self.range_max = 0.0, 0.0, 0.0, 0.0
-		
-		self.scan_sub = self.create_subscription(LaserScan, "/scan", self.scan_callback, qos_profile=qos_profile_sensor_data)
-		self.odom_sub = self.create_subscription(Odometry, "/odom", self.odom_callback, qos_profile=qos_profile_sensor_data)
+    def __init__(self):
+        super().__init__('gmapping_node')
+        self.distances = np.array([])
+        self.angles = np.array([])
+        self.information = np.array([])
+        self.x_odom, self.y_odom, self.theta_odom, self.range_max = 0.0, 0.0, 0.0, 0.0
 
-	def scan_callback(self, msgScan):
-		"""
-		Convert LaserScan msg to array
-		"""
-		distances = np.array([])
-		angles = np.array([])
-		information = np.array([])
-		self.range_max = msgScan.range_max
+        self.scan_sub = self.create_subscription(
+            LaserScan, "/scan", self.scan_callback, qos_profile=qos_profile_sensor_data)
+        self.odom_sub = self.create_subscription(
+            Odometry, "/odom", self.odom_callback, qos_profile=qos_profile_sensor_data)
 
-		# printing laser scan data
-		# print("msgScan.ranges[1]:", msgScan.ranges[1], "\tlen(msgScan.ranges): ", len(msgScan.ranges))
-		for i in range(len(msgScan.ranges)):
-			# angle calculation
-			# print("msgScan.angle_increment, msgScan.range_max, msgScan.range_min: ",msgScan.angle_increment, msgScan.range_max, msgScan.range_min)
-			ang = i * msgScan.angle_increment
+    def scan_callback(self, msgScan):
+        """
+        Convert LaserScan msg to array
+        """
 
-			# distance calculation
-			if ( msgScan.ranges[i] > msgScan.range_max ):
-				dist = msgScan.range_max
-			elif ( msgScan.ranges[i] < msgScan.range_min ):
-				dist = msgScan.range_min
-			else:
-				dist = msgScan.ranges[i]
+        self.range_max = msgScan.range_max
+        self.distances, self.angles, self.information = lidar_scan(msgScan)
+        # distances in [m], angles in [radians], information [0-1] (probability)
 
-			# smaller the distance, bigger the information (measurement is more confident)
-			inf = ((msgScan.range_max - dist) / msgScan.range_max) ** 2 
-
-			self.distances = np.append(distances, dist)
-			self.angles = np.append(angles, ang)
-			self.information = np.append(information, inf)
-
-		# distances in [m], angles in [radians], information [0-1]
-
-
-	def odom_callback(self, msgOdom):
-		"""
-		Get (x,y) coordinates from Odometry msg in [m]
-		"""
-		# print("msgOdom.pose.pose.orientation, msgOdom.pose.pose.position.x:",msgOdom.pose.pose.orientation, msgOdom.pose.pose.position.x)
-		# printing odom data
-		# print("msgOdom.pose.pose.position.x, msgOdom.pose.pose.position.y, msgOdom.pose.pose.position.orientation:\n",msgOdom.pose.pose.position.x, msgOdom.pose.pose.position.y, msgOdom.pose.pose.position.orientation)		
-		self.x = msgOdom.pose.pose.position.x
-		self.y = msgOdom.pose.pose.position.y
-		orientation_q = msgOdom.pose.pose.orientation
-		self.theta = transform_orientation(orientation_q)
-		print(self.theta)
+    def odom_callback(self, msgOdom):
+        """
+        Get (x,y) coordinates from Odometry msg in [m]
+        """
+        self.x_odom = msgOdom.pose.pose.position.x
+        self.y_odom = msgOdom.pose.pose.position.y
+        orientation_q = msgOdom.pose.pose.orientation
+        self.theta_odom = transform_orientation(orientation_q)
 
 def main():
-	
-	# thread = threading.Thread(target=rclpy.spin, args=(node, ), daemon=True)
-	# thread.start()	
 
-	# rate = node.create_rate(20)
+    P_prior = 0.5  # Prior occupancy probability
+    P_occ = 0.9	    # Probability that cell is occupied with total confidence
+    P_free = 0.3  # Probability that cell is free with total confidence
 
-	P_prior = 0.5	# Prior occupancy probability
-	P_occ = 0.9	# Probability that cell is occupied with total confidence
-	P_free = 0.3	# Probability that cell is free with total confidence 
+    RESOLUTION = 0.03  # Grid resolution in [m]
 
-	RESOLUTION = 0.03 # Grid resolution in [m]
+    MAP_NAME = 'world'  # map name without extension
 
-	MAP_NAME  = 'world' # map name without extension
+    map_x_lim = [-10, 10]
+    map_y_lim = [-10, 10]
 
-	if MAP_NAME[:5] == 'stage':
+    rclpy.init(args=sys.argv)
+    node = GmappingClass()
+    node.get_logger().info('Created gmapping_node')
+    # Spin in a separate thread
+    thread = threading.Thread(target=rclpy.spin, args=(node, ), daemon=True)
+    thread.start()
 
-		map_x_lim = [-3, 3]
-		map_y_lim = [-3, 3]
+    rate = node.create_rate(20)
 
-	elif MAP_NAME[:5] == 'world':
+    print("trying .... grid creation")
+    # Create grid map
+    gridMap = GridMap(X_lim=map_x_lim,
+                      Y_lim=map_y_lim,
+                      resolution=RESOLUTION,
+                      p=P_prior)
 
-		map_x_lim = [-4, 4]
-		map_y_lim = [-4, 4]
+    print("grid created")
 
-	else:
+    # Init time
+    t_start = perf_counter()
+    sim_time = 0
+    step = 0
 
-		map_x_lim = [-10, 10]
-		map_y_lim = [-6, 6]
+    try:
+        while rclpy.ok():
+            # waiting until msg is received is missing
+            distances, angles, information = node.distances, node.angles, node.information
+            x_odom, y_odom, theta_odom = node.x_odom, node.y_odom, node.theta_odom
 
-	rclpy.init(args=sys.argv)
-	node = GmappingClass()
-	node.get_logger().info('Created gmapping_node')	
-	# Spin in a separate thread
-	thread = threading.Thread(target=rclpy.spin, args=(node, ), daemon=True)
-	thread.start()	
+            print('distances:\n', distances, '\nangles:\n', angles, '\nx_odom:\n',
+                  x_odom, '\ny_odom:\n', y_odom, '\ntheta_odom:\n', theta_odom)
+            distances_x, distances_y = lidar_scan_xy(
+                distances, angles, x_odom, y_odom, theta_odom)
 
-	rate = node.create_rate(20)
+            # x1 and y1 for Bresenham's algorithm
+            x1, y1 = gridMap.discretize(x_odom, y_odom)
 
-	print("trying .... grid creation")
-	# Create grid map 
-	gridMap = GridMap(X_lim = map_x_lim, 
-				Y_lim = map_y_lim, 
-				resolution = RESOLUTION, 
-				p = P_prior)
+            # for BGR image of the grid map
+            X2 = []
+            Y2 = []
 
-	print("grid created")
+            for (dist_x, dist_y, dist) in zip(distances_x, distances_y, distances):
 
-	# Init time
-	t_start = perf_counter()
-	sim_time = 0
-	step = 0
+                # x2 and y2 for Bresenham's algorithm
+                x2, y2 = gridMap.discretize(dist_x, dist_y)
 
-	try:
-		while rclpy.ok():
-			# waiting until msg is received is missing
-			distances, angles, information = node.distances, node.angles, node.information
-			x_odom, y_odom, theta_odom = node.x_odom, node.y_odom, node.theta_odom
+                # draw a discrete line of free pixels, [robot position -> laser hit spot)
+                for (x_bres, y_bres) in bresenham(gridMap, x1, y1, x2, y2):
 
-			distances_x, distances_y = lidar_scan_xy(distances, angles, x_odom, y_odom, theta_odom)
+                    gridMap.update(x=x_bres, y=y_bres, p=P_free)
 
-			# x1 and y1 for Bresenham's algorithm
-			x1, y1 = gridMap.discretize(x_odom, y_odom)
+                # mark laser hit spot as ocuppied (if exists)
+                if dist < node.range_max:
 
-			# for BGR image of the grid map
-			X2 = []
-			Y2 = []
+                    gridMap.update(x=x2, y=y2, p=P_occ)
 
-			for (dist_x, dist_y, dist) in zip(distances_x, distances_y, distances):
+                # for BGR image of the grid map
+                X2.append(x2)
+                Y2.append(y2)
 
-				# x2 and y2 for Bresenham's algorithm
-				x2, y2 = gridMap.discretize(dist_x, dist_y)
+            # converting grip map to BGR image
+            bgr_image = gridMap.to_BGR_image()
 
-				# draw a discrete line of free pixels, [robot position -> laser hit spot)
-				for (x_bres, y_bres) in bresenham(gridMap, x1, y1, x2, y2):
+            # marking robot position with blue pixel value
+            set_pixel_color(bgr_image, x1, y1, 'BLUE')
 
-					gridMap.update(x = x_bres, y = y_bres, p = P_free)
+            # marking neighbouring pixels with blue pixel value
+            for (x, y) in gridMap.find_neighbours(x1, y1):
+                set_pixel_color(bgr_image, x, y, 'BLUE')
 
-				# mark laser hit spot as ocuppied (if exists)
-				if dist < node.range_max:
-					
-					gridMap.update(x = x2, y = y2, p = P_occ)
+            # marking laser hit spots with green value
+            for (x, y) in zip(X2, Y2):
+                set_pixel_color(bgr_image, x, y, 'GREEN')
+            print("resizing image")
+            resized_image = cv2.resize(src=bgr_image,
+                                       dsize=(500, 500),
+                                       interpolation=cv2.INTER_AREA)
+            print("rotating image")
+            rotated_image = cv2.rotate(src=resized_image,
+                                       rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-				# for BGR image of the grid map
-				X2.append(x2)
-				Y2.append(y2)
+            cv2.imshow("Grid map", rotated_image)
+            cv2.waitKey(1)
 
-			# converting grip map to BGR image
-			bgr_image = gridMap.to_BGR_image()
+            # Calculate step time in [s]
+            t_step = perf_counter()
+            step_time = t_step - t_start
+            sim_time += step_time
+            t_start = t_step
+            step += 1
 
-			# marking robot position with blue pixel value
-			set_pixel_color(bgr_image, x1, y1, 'BLUE')
-			
-			# marking neighbouring pixels with blue pixel value 
-			for (x, y) in gridMap.find_neighbours(x1, y1):
-				set_pixel_color(bgr_image, x, y, 'BLUE')
+            print('Step %d ==> %d [ms]' % (step, step_time * 1000))
 
-			# marking laser hit spots with green value
-			for (x, y) in zip(X2,Y2):
-				set_pixel_color(bgr_image, x, y, 'GREEN')
-			print("resizing image")
-			resized_image = cv2.resize(src = bgr_image, 
-							dsize = (500, 500), 
-							interpolation = cv2.INTER_AREA)
-			print("rotating image")
-			rotated_image = cv2.rotate(src = resized_image, 
-							rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
+            rate.sleep()
+            # print("slept")
 
-			cv2.imshow("Grid map", rotated_image)
-			cv2.waitKey(1)
+    # try:
+    # 	while rclpy.ok():
+    # 		rate.sleep()
+    # except KeyboardInterrupt:
+    # 	pass
 
-			# Calculate step time in [s]
-			t_step = perf_counter()
-			step_time = t_step - t_start
-			sim_time += step_time
-			t_start = t_step
-			step += 1 
+    # try:
+    # 	while rclpy.ok():
+    # 		rclpy.spin(node)
+    # except (KeyboardInterrupt):
+    # 	pass
+    except Exception as e:
+        print("Exception is: ", e)
+        print('\r\nSIMULATION TERMINATED!')
+        print('\nSimulation time: %.2f [s]' % sim_time)
+        print('Average step time: %d [ms]' % (sim_time * 1000 / step))
+        print('Frames per second: %.1f' % (step / sim_time))
 
-			print('Step %d ==> %d [ms]' % (step, step_time * 1000))
+        # Saving Grid Map
+        resized_image = cv2.resize(src=gridMap.to_BGR_image(),
+                                   dsize=(500, 500),
+                                   interpolation=cv2.INTER_AREA)
 
-			rate.sleep()
-			print("slept")
+        rotated_image = cv2.rotate(src=resized_image,
+                                   rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-	# try:
-	# 	while rclpy.ok():
-	# 		rate.sleep()
-	# except KeyboardInterrupt:
-	# 	pass
+        flag_1 = cv2.imwrite(img=rotated_image * 255.0,
+                             filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_TEST.png')
 
-	# try:
-	# 	while rclpy.ok():
-	# 		rclpy.spin(node)
-	# except (KeyboardInterrupt):
-	# 	pass
-	except Exception as e:
-		print("Exception is: ", e)
-		print('\r\nSIMULATION TERMINATED!')
-		print('\nSimulation time: %.2f [s]' % sim_time)
-		print('Average step time: %d [ms]' % (sim_time * 1000 / step))
-		print('Frames per second: %.1f' % (step / sim_time))
+        # Calculating Maximum likelihood estimate of the map
+        gridMap.calc_MLE()
 
-		# Saving Grid Map
-		resized_image = cv2.resize(src = gridMap.to_BGR_image(), 
-					   dsize = (500, 500), 
-					   interpolation = cv2.INTER_AREA)
+        # Saving MLE of the Grid Map
+        resized_image_MLE = cv2.resize(src=gridMap.to_BGR_image(),
+                                       dsize=(500, 500),
+                                       interpolation=cv2.INTER_AREA)
 
-		rotated_image = cv2.rotate(src = resized_image, 
-					   rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
+        rotated_image_MLE = cv2.rotate(src=resized_image_MLE,
+                                       rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-		flag_1 = cv2.imwrite(img = rotated_image * 255.0, 
-				     filename = MAPS_PATH + '/' + MAP_NAME + '_grid_map_TEST.png')
+        flag_2 = cv2.imwrite(img=rotated_image_MLE * 255.0,
+                             filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_TEST_mle.png')
 
-		# Calculating Maximum likelihood estimate of the map
-		gridMap.calc_MLE()
+        if flag_1 and flag_2:
+            print('\nGrid map successfully saved!\n')
 
-		# Saving MLE of the Grid Map
-		resized_image_MLE = cv2.resize(src = gridMap.to_BGR_image(), 
-					       dsize = (500, 500), 
-					       interpolation = cv2.INTER_AREA)
+        if cv2.waitKey(0) == 27:
+            cv2.destroyAllWindows()
 
-		rotated_image_MLE = cv2.rotate(src = resized_image_MLE, 
-					       rotateCode = cv2.ROTATE_90_COUNTERCLOCKWISE)
+        pass
 
-		flag_2 = cv2.imwrite(img = rotated_image_MLE * 255.0, 
-				     filename = MAPS_PATH + '/' + MAP_NAME + '_grid_map_TEST_mle.png')
+    rclpy.shutdown()
+    thread.join()
+    # finally:
+    # 	node.destroy_node()
+    # 	rclpy.try_shutdown()
 
-		if flag_1 and flag_2:
-			print('\nGrid map successfully saved!\n')
-
-		if cv2.waitKey(0) == 27:
-			cv2.destroyAllWindows()
-
-		pass
-
-
-	rclpy.shutdown()
-	thread.join()
-	# finally:
-	# 	node.destroy_node()
-	# 	rclpy.try_shutdown()
 
 if __name__ == '__main__':
-    main()	
+    main()
