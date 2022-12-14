@@ -190,6 +190,8 @@ def main():
 
         # Calculating Maximum likelihood estimate of the map
         gridMap.calc_MLE()
+        # Calculating surface normals to occupied cells 
+        gridMap.calc_surface_normal()
 
         # Saving MLE of the Grid Map
         resized_image_MLE = cv2.resize(src=gridMap.to_BGR_image(),

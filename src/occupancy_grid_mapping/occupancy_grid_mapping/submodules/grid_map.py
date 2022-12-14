@@ -50,6 +50,8 @@ class GridMap:
 		
 		# probability matrix in log-odds scale:
 		self.l = np.full(shape = (len(x), len(y)), fill_value = log_odds(p))
+		# normal vectors at each occupied cells:
+		self.surf_norm = np.full(shape = (len(x), len(y), 2), fill_value = np.zeros(2))
 
 	def get_shape(self):
 		"""
@@ -62,7 +64,6 @@ class GridMap:
 		Calculate Maximum Likelihood estimate of the map
 		"""
 		for x in range(self.l.shape[0]):
-
 			for y in range(self.l.shape[1]):
 
 				# cell is free
@@ -79,6 +80,52 @@ class GridMap:
 				else:
 
 					self.l[x][y] = log_odds(0.5)
+
+	def get_occupied_indices(self, neighbour_x_range,neighbour_y_range):
+		occupied_cells = []
+		for x in range(neighbour_x_range[0], neighbour_x_range[1]):
+			for y in range(neighbour_y_range[0], neighbour_y_range[1]):
+				if self.l[x][y] > log_odds(TRESHOLD_P_OCC):
+					occupied_cells.append([x,y])
+		return np.array(occupied_cells)
+
+	def get_norm(self, x, y, neghbour_size):
+		norm = np.zeros(2)
+		map_idx_x = [0, int((self.X_lim[1] - self.X_lim[0]) / self.resolution)]
+		map_idx_y = [0, int((self.Y_lim[1] - self.Y_lim[0]) / self.resolution)]
+		if (x+neghbour_size/2) < map_idx_x[1]:
+			neighbour_x_range_max = x+neghbour_size/2
+		else:
+			neighbour_x_range_max = map_idx_x[1]
+		if (y+neghbour_size/2) < map_idx_y[1]:
+			neighbour_y_range_max = y+neghbour_size/2
+		else:
+			neighbour_y_range_max = map_idx_y[1]			
+		neighbour_x_range = [min(x-neghbour_size/2, map_idx_x[0]), neighbour_x_range_max]
+		neighbour_y_range = [min(y-neghbour_size/2, map_idx_y[0]), neighbour_y_range_max]
+		occupied_indices_arr = self.get_occupied_indices(neighbour_x_range,neighbour_y_range)
+		min_cost_slope = -15
+		min_cost = 1e9
+		for slope in np.arange(-15,15,0.2):
+			cost = 0
+			for pts in occupied_indices_arr:
+				# getting non-normalised distance from line with slope 'm' passing through given point
+				cost+= abs(pts[1]-pts[0]-(y-slope*x))
+			if cost <= min_cost:
+				min_cost = cost
+				min_cost_slope = slope
+		norm_slope = -1/min_cost_slope
+		angle = np.arctan(norm_slope)
+		return np.array([np.cos(angle), np.sin(angle)])
+
+	def calc_surface_normal(self, neghbour_size=20):
+		"""
+		Calculate surface normals to occupied cells if its neighbourhood occupied cells have line structure
+		"""
+		for x in range(self.l.shape[0]):
+			for y in range(self.l.shape[1]):
+				if self.l[x][y] > log_odds(TRESHOLD_P_OCC):
+					self.surf_norm[x][y] = self.get_norm(x, y, neghbour_size)		
 
 	def to_BGR_image(self):
 		"""
