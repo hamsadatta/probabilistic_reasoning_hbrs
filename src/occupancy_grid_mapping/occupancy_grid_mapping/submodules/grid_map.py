@@ -51,7 +51,7 @@ class GridMap:
 		# probability matrix in log-odds scale:
 		self.l = np.full(shape = (len(x), len(y)), fill_value = log_odds(p))
 		# normal vectors at each occupied cells:
-		self.surf_norm = np.full(shape = (len(x), len(y), 2), fill_value = np.zeros(2))
+		self.surf_norm = np.full(shape = (len(x), len(y)), fill_value = np.NaN)
 
 	def get_shape(self):
 		"""
@@ -90,7 +90,6 @@ class GridMap:
 		return np.array(occupied_cells)
 
 	def get_norm(self, x, y, neghbour_size):
-		norm = np.zeros(2)
 		map_idx_x = [0, int((self.X_lim[1] - self.X_lim[0]) / self.resolution)]
 		map_idx_y = [0, int((self.Y_lim[1] - self.Y_lim[0]) / self.resolution)]
 		if (x+neghbour_size/2) < map_idx_x[1]:
@@ -115,8 +114,7 @@ class GridMap:
 				min_cost = cost
 				min_cost_slope = slope
 		norm_slope = -1/min_cost_slope
-		angle = np.arctan(norm_slope)
-		return np.array([np.cos(angle), np.sin(angle)])
+		return np.array(norm_slope)
 
 	def calc_surface_normal(self, neghbour_size=20):
 		"""
