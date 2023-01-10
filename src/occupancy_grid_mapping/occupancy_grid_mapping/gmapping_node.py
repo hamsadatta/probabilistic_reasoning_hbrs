@@ -52,8 +52,8 @@ class GmappingClass(Node):
 
     def run(self):
         P_prior = 0.5  # Prior occupancy probability
-        P_occ = 0.9	    # Probability that cell is occupied with total confidence
-        P_free = 0.3  # Probability that cell is free with total confidence
+        P_occ = 0.9	   # Probability that cell is occupied with total confidence
+        P_free = 0.3   # Probability that cell is free with total confidence
 
         RESOLUTION = 0.03  # Grid resolution in [m]
         MAPS_PATH = get_package_share_directory('occupancy_grid_mapping')
@@ -61,7 +61,6 @@ class GmappingClass(Node):
 
         map_x_lim = [-10, 10]
         map_y_lim = [-10, 10]    
-        rate = self.create_rate(20)
         self.thread.start()
 
         print("trying .... grid creation")
@@ -167,14 +166,14 @@ class GmappingClass(Node):
                                     rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
 
             flag_1 = cv2.imwrite(img=rotated_image * 255.0,
-                                filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_TEST.png')
+                                filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_img.png')
 
             # Calculating Maximum likelihood estimate of the map
             gridMap.calc_MLE()
             print('\nMLE completed!\n')
 
             # Calculating surface normals to occupied cells 
-            # gridMap.calc_surface_normal()
+            gridMap.calc_surface_normal()
 
             # Saving MLE of the Grid Map
             resized_image_MLE = cv2.resize(src=gridMap.to_BGR_image(),
@@ -185,7 +184,7 @@ class GmappingClass(Node):
                                         rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
 
             flag_2 = cv2.imwrite(img=rotated_image_MLE * 255.0,
-                                filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_TEST_mle.png')
+                                filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_mle.png')
 
             if flag_1 and flag_2:
                 print('\nGrid map successfully saved! Press any key from the map display to end mapping\n')
@@ -209,7 +208,9 @@ def main():
     node.run()
     rclpy.spin(node)
     node.destroy_node()
-    rclpy.shutdown()
+    if rclpy.ok():
+        print('rclpy is running. Shutting it down')
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
