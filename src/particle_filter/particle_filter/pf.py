@@ -10,8 +10,9 @@ from std_msgs.msg import Header, String
 
 import tf2_ros
 from tf2_ros.transform_listener import TransformListener
-from tf2_ros import TransformBroadcaster
-from tf2_ros.buffer import Buffer
+# from tf2_ros import TransformBroadcaster
+# from tf2_ros.buffer import Buffer
+from tf2_ros import Buffer, TransformListener
 from tf_transformations import quaternion_from_euler, euler_from_quaternion
 from rclpy.qos import QoSProfile
 from rclpy.qos import QoSDurabilityPolicy
@@ -28,7 +29,7 @@ from random import randint, random, uniform
 
 def to_msg_msg(msg):
     return msg
-    
+
 tf2_ros.ConvertRegistration().add_to_msg(PoseStamped, to_msg_msg)
 
 
@@ -103,12 +104,12 @@ class ParticleFilter(Node):
 
         # once everything is setup initialized will be set to true
         self.initialized = False
-        print("init start")
 
         # initialize this particle filter node
         super().__init__('turtlebot3_particle_filter')
 
-        self.tf_buffer = Buffer()
+        # self.tf_buffer = Buffer()
+        self.tf_buffer = Buffer(self)
 
         # set the topic names and frame names
         self.base_frame = "base_footprint"
@@ -116,7 +117,7 @@ class ParticleFilter(Node):
         self.odom_frame = "odom"
         self.scan_topic = "scan"
 
-        # inialize our map
+        # inialize our map (message type)
         self.map = OccupancyGrid()
 
         # the number of particles used in the particle filter
@@ -149,7 +150,7 @@ class ParticleFilter(Node):
 
         # subscribe to the map server
         self.create_subscription(
-            OccupancyGrid, self.map_topic, self.get_map, QoSProfile(depth=10,durability=QoSDurabilityPolicy.TRANSIENT_LOCAL))
+            OccupancyGrid, self.map_topic, self.get_map, QoSProfile(depth=10, durability=QoSDurabilityPolicy.TRANSIENT_LOCAL))
 
         # subscribe to the lidar scan from the robot
         self.create_subscription(
@@ -157,14 +158,10 @@ class ParticleFilter(Node):
 
         # enable listening for and broadcasting corodinate transforms
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.tf_broadcaster = TransformBroadcaster(self)
-        
 
         # intialize the particle cloud
-        
-
         self.initialized = True
-        print("init end")
+        print("initialisation completed!")
 
     def get_map(self, data):
         print("get_map start")
@@ -199,13 +196,13 @@ class ParticleFilter(Node):
 
         return (row_index, col_index)
 
-    # checks if a particle is within the house and not on an object
+    # checks if a particle is within the map
     def valid_particle(self, point: Point) -> bool:
         print("valid_particle start")
         if self.get_map_val(*(self.point_to_map_indices(point))) == 0:
             return True
 
-    # generates a random particle within the house
+    # generates a random particle within the map
     def gen_random_particle(self) -> Particle:
         print("gen_random_particle start")
         # randomly generate a point until we get one in bounds
@@ -215,7 +212,7 @@ class ParticleFilter(Node):
         # randomly generate orientation
         quat_array = quaternion_from_euler(0, 0, uniform(0, 2*math.pi))
         orientation = Quaternion(
-             x=quat_array[0], y=quat_array[1], z=quat_array[2], w=quat_array[3])
+            x=quat_array[0], y=quat_array[1], z=quat_array[2], w=quat_array[3])
         pose = Pose(position=pt, orientation=orientation)
 
         return Particle(pose, w=1)
@@ -289,25 +286,28 @@ class ParticleFilter(Node):
         print("robot_scan_received start")
         # wait until initialization is complete
         if not (self.initialized):
+            print("not initialized")
             return
 
         # we need to be able to transfrom the laser frame to the base frame
-        if not (self.tf_listener.buffer.can_transform(self.base_frame, data.header.frame_id, data.header.stamp)):
+        
+        # if not (self.tf_listener.buffer.can_transform(self.base_frame, data.header.frame_id, data.header.stamp)):
+        #     return
+        if not (tf2_ros.Buffer.can_transform(self.base_frame, data.header.frame_id, data.header.stamp)):
             return
 
         # wait for a little bit for the transform to become avaliable (in case the scan arrives
         # a little bit before the odom to base_footprint transform was updated)
-        self.tf_listener.buffer.can_transform(
+
+        # self.tf_listener.buffer.can_transform(
+        #     self.base_frame, self.odom_frame, data.header.stamp, Duration(seconds=0.5))
+        tf2_ros.Buffer.can_transform(
             self.base_frame, self.odom_frame, data.header.stamp, Duration(seconds=0.5))
-        if not (self.tf_listener.buffer.can_transform(self.base_frame, data.header.frame_id, data.header.stamp)):
-            return
 
-        # calculate the pose of the laser distance sensor
-        p = PoseStamped(
-            header=Header(stamp=self.get_clock().now().to_msg(),
-                          frame_id=data.header.frame_id))
-
-        self.laser_pose = self.tf_listener.buffer.transform(p, self.base_frame)
+        # if not (self.tf_listener.buffer.can_transform(self.base_frame, data.header.frame_id, data.header.stamp)):
+        #     return
+        if not (tf2_ros.Buffer.can_transform(self.base_frame, data.header.frame_id, data.header.stamp)):
+            return        
 
         # determine where the robot thinks it is based on its odometry
         p = PoseStamped(
@@ -315,7 +315,7 @@ class ParticleFilter(Node):
                           frame_id=self.base_frame),
             pose=Pose())
 
-        self.odom_pose = self.tf_listener.buffer.transform(p, self.odom_frame)
+        self.odom_pose = self.tf_buffer.transform(p, self.odom_frame)
 
         # we need to be able to compare the current odom pose to the prior odom pose
         # if there isn't a prior odom pose, set the odom_pose variable to the current pose

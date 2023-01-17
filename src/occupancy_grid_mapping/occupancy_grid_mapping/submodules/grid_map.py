@@ -81,27 +81,20 @@ class GridMap:
 
 					self.l[x][y] = log_odds(0.5)
 
-	def get_occupied_indices(self, neighbour_x_range,neighbour_y_range):
+	def get_occupied_indices(self, neighbour_x_range,neighbour_y_range):  # ran after calculating MLE
 		occupied_cells = []
 		for x in range(neighbour_x_range[0], neighbour_x_range[1]):
 			for y in range(neighbour_y_range[0], neighbour_y_range[1]):
-				if self.l[x][y] > log_odds(TRESHOLD_P_OCC):
+				if self.l[x][y] > log_odds(0.5):
 					occupied_cells.append([x,y])
 		return np.array(occupied_cells)
 
-	def get_norm(self, x, y, neghbour_size):
-		map_idx_x = [0, int((self.X_lim[1] - self.X_lim[0]) / self.resolution)]
-		map_idx_y = [0, int((self.Y_lim[1] - self.Y_lim[0]) / self.resolution)]
-		if (x+neghbour_size/2) < map_idx_x[1]:
-			neighbour_x_range_max = x+neghbour_size/2
-		else:
-			neighbour_x_range_max = map_idx_x[1]
-		if (y+neghbour_size/2) < map_idx_y[1]:
-			neighbour_y_range_max = y+neghbour_size/2
-		else:
-			neighbour_y_range_max = map_idx_y[1]			
-		neighbour_x_range = [min(x-neghbour_size/2, map_idx_x[0]), neighbour_x_range_max]
-		neighbour_y_range = [min(y-neghbour_size/2, map_idx_y[0]), neighbour_y_range_max]
+	def get_norm(self, x, y, neghbour_size):  # ran after calculating MLE
+		map_idx_x = [0, self.l.shape[0]]
+		map_idx_y = [0, self.l.shape[1]]
+
+		neighbour_x_range = [int(max(x-neghbour_size/2, map_idx_x[0])), int(min(x+neghbour_size/2,map_idx_y[0]))]
+		neighbour_y_range = [int(max(y-neghbour_size/2, map_idx_y[0])), int(min(y+neghbour_size/2,map_idx_y[1]))]
 		occupied_indices_arr = self.get_occupied_indices(neighbour_x_range,neighbour_y_range)
 		min_cost_slope = -15
 		min_cost = 1e9
@@ -109,20 +102,23 @@ class GridMap:
 			cost = 0
 			for pts in occupied_indices_arr:
 				# getting non-normalised distance from line with slope 'm' passing through given point
-				cost+= abs(pts[1]-pts[0]-(y-slope*x))
+				cost+= abs(-slope*pts[1]+pts[0]-(y-slope*x))
 			if cost <= min_cost:
 				min_cost = cost
 				min_cost_slope = slope
 		norm_slope = -1/min_cost_slope
 		return np.array(norm_slope)
 
-	def calc_surface_normal(self, neghbour_size=20):
+	def calc_surface_normal(self, neghbour_size=20):  # ran after calculating MLE
 		"""
 		Calculate surface normals to occupied cells if its neighbourhood occupied cells have line structure
 		"""
+		print('Saving self.l')
+		np.save('/home/melody/Desktop/MAS_course_materials/Courses/04Fourth Semester/PR/probabilistic_reasoning_hbrs/self_l.npy',
+                    self.l)
 		for x in range(self.l.shape[0]):
 			for y in range(self.l.shape[1]):
-				if self.l[x][y] > log_odds(TRESHOLD_P_OCC):
+				if self.l[x][y] > log_odds(0.5):
 					self.surf_norm[x][y] = self.get_norm(x, y, neghbour_size)		
 
 	def to_BGR_image(self):
@@ -165,11 +161,8 @@ class GridMap:
 		Check if pixel (x,y) is within the map bounds
 		"""
 		if x >= 0 and x < self.get_shape()[0] and y >= 0 and y < self.get_shape()[1]:
-			
 			return True 
-
 		else:
-
 			return False
 
 	def find_neighbours(self, x, y):
@@ -180,42 +173,34 @@ class GridMap:
 		Y_neighbours = []
 
 		if self.check_pixel(x + 1, y):
-
 			X_neighbours.append(x + 1)
 			Y_neighbours.append(y)
 
 		if self.check_pixel(x + 1, y + 1):
-
 			X_neighbours.append(x + 1)
 			Y_neighbours.append(y + 1)
 
 		if self.check_pixel(x + 1, y - 1):
-
 			X_neighbours.append(x + 1)
 			Y_neighbours.append(y - 1)
 
 		if self.check_pixel(x, y + 1):
-
 			X_neighbours.append(x)
 			Y_neighbours.append(y + 1)
 
 		if self.check_pixel(x, y - 1):
-
 			X_neighbours.append(x)
 			Y_neighbours.append(y - 1)
 
 		if self.check_pixel(x - 1, y):
-
 			X_neighbours.append(x - 1)
 			Y_neighbours.append(y)
 
 		if self.check_pixel(x - 1, y + 1):
-
 			X_neighbours.append(x - 1)
 			Y_neighbours.append(y + 1)
 
 		if self.check_pixel(x - 1, y - 1):
-
 			X_neighbours.append(x - 1)
 			Y_neighbours.append(y - 1)
 

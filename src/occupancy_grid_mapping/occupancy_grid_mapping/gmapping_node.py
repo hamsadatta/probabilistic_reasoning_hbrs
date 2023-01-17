@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import os
+import yaml
 from time import perf_counter
 import sys
 import threading
@@ -55,7 +56,7 @@ class GmappingClass(Node):
         P_occ = 0.9	   # Probability that cell is occupied with total confidence
         P_free = 0.3   # Probability that cell is free with total confidence
 
-        RESOLUTION = 0.03  # Grid resolution in [m]
+        RESOLUTION = 0.04  # Grid resolution in [m]
         MAPS_PATH = get_package_share_directory('occupancy_grid_mapping')
         MAP_NAME = 'world'  # map name without extension
 
@@ -75,7 +76,7 @@ class GmappingClass(Node):
         # Init time
         t_start = perf_counter()
         sim_time = 0
-        step = 0     
+        step = 0
 
         try:
             while rclpy.ok():
@@ -163,28 +164,51 @@ class GmappingClass(Node):
                                     interpolation=cv2.INTER_AREA)
 
             rotated_image = cv2.rotate(src=resized_image,
-                                    rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
+                                        rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-            flag_1 = cv2.imwrite(img=rotated_image * 255.0,
-                                filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_img.png')
+            flag_1 = cv2.imwrite(MAPS_PATH + '/' + MAP_NAME + '_grid_map_img_rgb.png',
+                                rotated_image * 255.0)
 
             # Calculating Maximum likelihood estimate of the map
             gridMap.calc_MLE()
             print('\nMLE completed!\n')
 
             # Calculating surface normals to occupied cells 
+            print('Calculating surface normals to occupied cells ')
             gridMap.calc_surface_normal()
 
+            # Saving surface normals as npy file
+            np.save(MAPS_PATH + '/' + MAP_NAME + '_grid_map_surface_normal.npy',
+                    gridMap.surf_norm)
+            
             # Saving MLE of the Grid Map
-            resized_image_MLE = cv2.resize(src=gridMap.to_BGR_image(),
+            resized_image_MLE = cv2.resize(src=gridMap.to_grayscale_image(),
                                         dsize=(500, 500),
                                         interpolation=cv2.INTER_AREA)
 
             rotated_image_MLE = cv2.rotate(src=resized_image_MLE,
-                                        rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
+                                            rotateCode=cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-            flag_2 = cv2.imwrite(img=rotated_image_MLE * 255.0,
-                                filename=MAPS_PATH + '/' + MAP_NAME + '_grid_map_mle.png')
+            flag_2 = cv2.imwrite(MAPS_PATH + '/' + MAP_NAME + '_grid_map_mle.pgm',
+                                rotated_image_MLE * 255.0)
+
+            # Define the map metadata as a dictionary
+            map_metadata = {
+                'image': MAP_NAME + '_grid_map_mle.pgm',
+                'resolution': 0.04, # as a range of values between -10 and 10 is discretized into 500 cells
+                'origin': [0, 0, 0],
+                'negate': 0,
+                'occupied_thresh': 0.65,
+                'free_thresh': 0.196
+            }
+
+            # Save the map metadata as a YAML file
+            with open(MAPS_PATH + '/' + MAP_NAME + '_map.yaml', 'w') as f:
+                yaml.dump(map_metadata, f)
+            with open('map.yaml', 'w') as f:
+                yaml.dump(map_metadata, f)
+            cv2.imwrite(MAP_NAME + '_grid_map_mle.pgm',
+                                rotated_image_MLE * 255.0)
 
             if flag_1 and flag_2:
                 print('\nGrid map successfully saved! Press any key from the map display to end mapping\n')
@@ -194,7 +218,7 @@ class GmappingClass(Node):
             pass
 
         finally:
-            self.thread.join()        
+            self.thread.join()
 
     def thread_function(self):
         while rclpy.ok():
